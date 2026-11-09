@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="uz"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rasmiy Anime</title>
+<style>
+:root{--bg:#0a0818;--c:#16122e;--l:#2c2552;--t:#f2eefc;--m:#a79fc7;--p:#8b5cf6}
+*{box-sizing:border-box;margin:0}body{background:var(--bg);color:var(--t);font:16px/1.5 system-ui,sans-serif}
+a{color:inherit;text-decoration:none}main{max-width:980px;margin:0 auto;padding:18px}
+nav{display:flex;gap:14px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--l);flex-wrap:wrap}nav b{margin-right:auto}
+h1{font-size:clamp(30px,7vw,52px);margin:16px 0}h2{margin:14px 0 8px}
+input,select,textarea{padding:11px 14px;border-radius:12px;border:1px solid var(--l);background:var(--c);color:var(--t);font:inherit;max-width:100%}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.row>input{flex:1;min-width:140px}
+.col{display:flex;flex-direction:column;gap:10px;max-width:420px}
+.btn,.btn2{padding:11px 20px;border-radius:999px;border:1px solid var(--p);background:var(--p);color:#fff;font:inherit;font-weight:700;cursor:pointer;display:inline-block}.btn2{background:none;border-color:var(--l)}.btn2.on{background:var(--p)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.card{background:var(--c);border-radius:12px;overflow:hidden;border:1px solid var(--l)}.card img,.ph{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:var(--l)}.card p{padding:8px 10px;font-size:14px}
+.vip{color:#f5c542;font-size:12px}
+iframe,video{width:100%;aspect-ratio:16/9;border:0;background:#000;border-radius:12px}
+.eps,.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+table{width:100%;border-collapse:collapse}td{padding:6px;border-bottom:1px solid var(--l);font-size:14px}
+:focus-visible{outline:3px solid #8fe3cf}
+</style></head><body>
+<nav id="nav"></nav><main id="app"></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SB_URL="SUPABASE_URL_NI_SHU_YERGA",SB_KEY="ANON_KEY_NI_SHU_YERGA";
+if(SB_URL.includes("SHU_YERGA")){document.body.innerHTML="<p style='padding:20px'>index.html boshidagi SB_URL va SB_KEY ni to’ldiring.</p>";throw 0}
+const GENRES=["Action","Fantaziya","Romantika","Ilmiy fantastika","Sirli","Komediya","G’ayritabiiy","Sport","Musiqa","Drama","Sarguzasht","Triller"];
+const MAX=1073741824; // 1 GB
+const sb=supabase.createClient(SB_URL,SB_KEY),$=s=>document.querySelector(s),app=$("#app");
+let me=null,prof=null,tab="anime";
+const isStaff=()=>prof&&["owner","moderator","editor"].includes(prof.role);
+const vipOn=()=>isStaff()||(prof?.vip_until&&new Date(prof.vip_until)>=new Date(new Date().toDateString()));
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>"&#"+c.charCodeAt(0)+";");
+const err=e=>alert("Xatolik: "+(e.message||e));
+
+async function up(f,dir){
+  if(f.size>MAX)throw Error("Fayl 1 GB dan katta");
+  const p=dir+"/"+Date.now()+"-"+f.name.replace(/[^\w.]/g,"_");
+  const{error}=await sb.storage.from("media").upload(p,f);if(error)throw error;
+  return sb.storage.from("media").getPublicUrl(p).data.publicUrl;
+}
+function player(u){let m;
+  if(m=u.match(/(?:youtu\.be\/|v=)([\w-]{11})/))return `<iframe src="https://www.youtube.com/embed/${m[1]}" allowfullscreen></iframe>`;
+  if(m=u.match(/drive\.google\.com\/file\/d\/([\w-]+)/))return `<iframe src="https://drive.google.com/file/d/${m[1]}/preview" allowfullscreen></iframe>`;
+  return `<video controls playsinline src="${esc(u)}"></video>`;
+}
+async function loadMe(){
+  const{data:{session}}=await sb.auth.getSession();me=session?.user||null;prof=null;
+  if(me)prof=(await sb.from("profiles").select("*").eq("id",me.id).single()).data;
+  $("#nav").innerHTML=`<b><a href="#/">Rasmiy Anime</a></b><a href="#/">Katalog</a>${isStaff()?'<a href="#/admin">Admin</a>':''}<a href="#/${me?'profile':'login'}">${me?'Profil':'Kirish'}</a>`;
+}
+async function home(){
+  app.innerHTML=`<h1>Anime olami bir joyda</h1><div class="row"><input id="q" type="search" placeholder="Anime nomi"><select id="g"><option value="">Barcha janrlar</option>${GENRES.map(g=>`<option>${g}</option>`).join("")}</select><label class="btn2">Rasm orqali topish<input id="img" type="file" accept="image/*" hidden></label></div><p id="res"></p><div id="grid" class="grid"></div>`;
+  const r=await sb.from("anime").select("*").order("created_at",{ascending:false}),list=r.data||[];
+  const draw=()=>{const q=$("#q").value.toLowerCase(),g=$("#g").value;
+    const l=list.filter(a=>a.title.toLowerCase().includes(q)&&(!g||(a.genres||[]).includes(g)));
+    $("#grid").innerHTML=l.length?l.map(a=>`<a class="card" href="#/anime/${a.id}">${a.cover_url?`<img src="${esc(a.cover_url)}" alt="" loading="lazy">`:'<div class="ph"></div>'}<p>${esc(a.title)}${a.vip?' <span class="vip">VIP</span>':''}</p></a>`).join(""):"<p>Hozircha anime yo’q.</p>"};
+  $("#q").oninput=draw;$("#g").onchange=draw;draw();
+  $("#img").onchange=async e=>{const f=e.target.files[0];if(!f)return;$("#res").textContent="Qidirilmoqda...";
+    try{const fd=new FormData();fd.append("image",f);
+      const j=await(await fetch("https://api.trace.moe/search?anilistInfo",{method:"POST",body:fd})).json(),t=j.result&&j.result[0];
+      if(!t){$("#res").textContent="Topilmadi.";return}
+      const T=t.anilist.title,n=T.romaji||T.english||T.native;
+      $("#res").innerHTML=`Eng yaqin: <b>${esc(n)}</b> (${Math.round(t.similarity*100)}%), epizod ${esc(t.episode??"?")}`;
+      $("#q").value=n;draw();
+    }catch{$("#res").textContent="Xatolik. Qayta urinib ko’ring."}};
+}
+async function animePage(id){
+  const[a,e]=await Promise.all([sb.from("anime").select("*").eq("id",id).single(),sb.from("episodes").select("*").eq("anime_id",id).order("number")]);
+  if(!a.data){app.innerHTML="<p>Topilmadi.</p>";return}
+  const A=a.data,E=e.data||[];
+  app.innerHTML=`<h1>${esc(A.title)}</h1><p>${esc((A.genres||[]).join(", "))} ${A.year?"· "+A.year:""}</p><p>${esc(A.description)}</p><div id="pl"></div><div class="eps">${E.map(x=>`<button class="btn2" data-i="${x.id}">${esc(x.number)}${x.vip?" ★":""}</button>`).join("")||"Epizodlar hali yo’q."}</div>`;
+  app.querySelectorAll("[data-i]").forEach(b=>b.onclick=async()=>{
+    const x=E.find(z=>z.id==b.dataset.i);
+    if(x.vip&&!vipOn()){$("#pl").innerHTML=`<p>Bu epizod VIP obunachilar uchun. ${me?"":'Avval <a href="#/login"><u>kiring</u></a>.'}</p>`;return}
+    const{data}=await sb.from("videos").select("url").eq("episode_id",x.id).single();
+    $("#pl").innerHTML=data?player(data.url):"<p>Video topilmadi.</p>";
+  });
+}
+function loginPage(){
+  app.innerHTML=`<h2>Kirish</h2><div class="col"><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Parol (kamida 6 belgi)"><div class="row"><button class="btn" id="in">Kirish</button><button class="btn2" id="up">Ro’yxatdan o’tish</button></div><button class="btn2" data-p="google">Google bilan kirish</button><button class="btn2" data-p="facebook">Facebook bilan kirish</button></div>`;
+  const cred=()=>({email:$("#em").value.trim(),password:$("#pw").value});
+  $("#in").onclick=async()=>{const{error}=await sb.auth.signInWithPassword(cred());error?err(error):location.hash="#/"};
+  $("#up").onclick=async()=>{const{data,error}=await sb.auth.signUp(cred());if(error)return err(error);data.session?location.hash="#/":alert("Emailingizga tasdiqlash xati yuborildi.")};
+  app.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>sb.auth.signInWithOAuth({provider:b.dataset.p,options:{redirectTo:location.origin+location.pathname}}));
+}
+function profilePage(){
+  if(!me){location.hash="#/login";return}
+  app.innerHTML=`<h2>Profil</h2><p>${esc(me.email)}</p><p>Rol: ${esc(prof?.role||"user")}</p><p>VIP: ${vipOn()?"faol"+(prof?.vip_until?" ("+prof.vip_until+" gacha)":""):"yo’q"}</p><div class="row"><button class="btn2" id="out">Chiqish</button></div>`;
+  $("#out").onclick=async()=>{await sb.auth.signOut();location.hash="#/"};
+}
+async function adminPage(){
+  if(!isStaff()){app.innerHTML="<p>Bu bo’lim faqat xodimlar uchun.</p>";return}
+  const T=[["anime","Anime"],["ep","Epizod"],["users","Foydalanuvchilar"]];
+  app.innerHTML=`<h2>Admin panel</h2><div class="tabs">${T.map(t=>`<button class="btn2 ${tab==t[0]?"on":""}" data-t="${t[0]}">${t[1]}</button>`).join("")}</div><div id="ad"></div>`;
+  app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;adminPage()});
+  ({anime:adAnime,ep:adEp,users:adUsers})[tab]();
+}
+async function adAnime(){
+  const{data}=await sb.from("anime").select("id,title").order("id",{ascending:false});
+  $("#ad").innerHTML=`<div class="col"><input id="t" placeholder="Nomi"><input id="y" type="number" placeholder="Yili"><input id="gn" placeholder="Janrlar (vergul bilan)"><textarea id="d" rows="3" placeholder="Tavsif"></textarea><input id="cv" placeholder="Poster havolasi (yoki fayl tanlang)"><input id="cf" type="file" accept="image/*"><label><input id="v" type="checkbox"> VIP anime</label><button class="btn" id="sv">Qo’shish</button></div><h2>Mavjud animelar</h2><table>${(data||[]).map(a=>`<tr><td>${esc(a.title)}</td><td><button class="btn2" data-x="${a.id}">O’chirish</button></td></tr>`).join("")}</table>`;
+  $("#sv").onclick=async()=>{try{
+    let c=$("#cv").value.trim();const f=$("#cf").files[0];if(f)c=await up(f,"posters");
+    const{error}=await sb.from("anime").insert({title:$("#t").value.trim(),year:+$("#y").value||null,genres:$("#gn").value.split(",").map(s=>s.trim()).filter(Boolean),description:$("#d").value,cover_url:c||null,vip:$("#v").checked});
+    if(error)throw error;adAnime();}catch(e){err(e)}};
+  $("#ad").querySelectorAll("[data-x]").forEach(b=>b.onclick=async()=>{if(!confirm("O’chirilsinmi?"))return;const{error}=await sb.from("anime").delete().eq("id",b.dataset.x);error?err(error):adAnime()});
+}
+async function adEp(){
+  const{data}=await sb.from("anime").select("id,title").order("title");
+  $("#ad").innerHTML=`<div class="col"><select id="a">${(data||[]).map(a=>`<option value="${a.id}">${esc(a.title)}</option>`).join("")}</select><input id="n" type="number" placeholder="Epizod raqami"><input id="t" placeholder="Epizod nomi"><input id="u" placeholder="Video havolasi (mp4, YouTube, Drive)"><input id="f" type="file" accept="video/*"><label><input id="v" type="checkbox"> VIP epizod</label><button class="btn" id="sv">Qo’shish</button><p id="st"></p></div>`;
+  $("#sv").onclick=async()=>{try{
+    let u=$("#u").value.trim();const f=$("#f").files[0];
+    if(f){$("#st").textContent="Yuklanmoqda...";u=await up(f,"videos")}
+    if(!u)throw Error("Video havolasi yoki fayl kerak");
+    const{data:e,error}=await sb.from("episodes").insert({anime_id:+$("#a").value,number:+$("#n").value,title:$("#t").value,vip:$("#v").checked}).select().single();
+    if(error)throw error;
+    const r=await sb.from("videos").insert({episode_id:e.id,url:u});if(r.error)throw r.error;
+    $("#st").textContent="Saqlandi ✓";}catch(x){$("#st").textContent="";err(x)}};
+}
+async function adUsers(){
+  const{data}=await sb.from("profiles").select("*").order("email"),own=prof.role=="owner";
+  $("#ad").innerHTML=`<table>${(data||[]).map(u=>`<tr><td>${esc(u.email)}</td>${own?`<td><select data-r="${u.id}">${["user","editor","moderator","owner"].map(r=>`<option ${r==u.role?"selected":""}>${r}</option>`).join("")}</select></td><td><input data-d="${u.id}" type="date" value="${u.vip_until||""}"></td><td><button class="btn2" data-s="${u.id}">Saqlash</button></td>`:`<td>${esc(u.role)}</td><td>${u.vip_until||"—"}</td>`}</tr>`).join("")}</table><p>VIP ko’rsatilgan sanagacha amal qiladi.</p>`;
+  $("#ad").querySelectorAll("[data-s]").forEach(b=>b.onclick=async()=>{const id=b.dataset.s;
+    const{error}=await sb.from("profiles").update({role:$(`[data-r="${id}"]`).value,vip_until:$(`[data-d="${id}"]`).value||null}).eq("id",id);
+    error?err(error):b.textContent="✓"});
+}
+function route(){
+  const[p,id]=location.hash.slice(2).split("/");
+  ({"":home,anime:animePage,login:loginPage,profile:profilePage,admin:adminPage}[p]||home)(id);
+}
+addEventListener("hashchange",route);
+sb.auth.onAuthStateChange(()=>setTimeout(async()=>{await loadMe();route()},0));
+</script></body></html>
